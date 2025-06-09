@@ -19,8 +19,10 @@ const AuthGuard: React.FC<AuthGuardProps> = ({ children }) => {
   const [userIP, setUserIP] = useState<string>("");
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [isRegistering, setIsRegistering] = useState(false);
 
   // Разрешенные IP адреса (можно расширить)
   const allowedIPs = ["127.0.0.1", "::1", "localhost"];
@@ -67,11 +69,17 @@ const AuthGuard: React.FC<AuthGuardProps> = ({ children }) => {
       return;
     }
 
+    // Получаем сохраненных пользователей
+    const savedUsers = JSON.parse(
+      localStorage.getItem("registeredUsers") || "[]",
+    );
+    const allUsers = [validCredentials, ...savedUsers];
+
     // Проверка логина и пароля
-    if (
-      login === validCredentials.login &&
-      password === validCredentials.password
-    ) {
+    const user = allUsers.find(
+      (u) => u.login === login && u.password === password,
+    );
+    if (user) {
       setIsAuthenticated(true);
       localStorage.setItem("authToken", "authenticated");
     } else {
@@ -79,11 +87,62 @@ const AuthGuard: React.FC<AuthGuardProps> = ({ children }) => {
     }
   };
 
+  const handleRegister = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+
+    // Валидация
+    if (login.length < 3) {
+      setError("Логин должен содержать минимум 3 символа");
+      return;
+    }
+
+    if (password.length < 6) {
+      setError("Пароль должен содержать минимум 6 символов");
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError("Пароли не совпадают");
+      return;
+    }
+
+    // Проверяем, не существует ли уже такой пользователь
+    const savedUsers = JSON.parse(
+      localStorage.getItem("registeredUsers") || "[]",
+    );
+    const allUsers = [validCredentials, ...savedUsers];
+
+    if (allUsers.find((u) => u.login === login)) {
+      setError("Пользователь с таким логином уже существует");
+      return;
+    }
+
+    // Сохраняем нового пользователя
+    const newUser = { login, password };
+    savedUsers.push(newUser);
+    localStorage.setItem("registeredUsers", JSON.stringify(savedUsers));
+
+    // Автоматически входим
+    setIsAuthenticated(true);
+    localStorage.setItem("authToken", "authenticated");
+  };
+
   const handleLogout = () => {
     setIsAuthenticated(false);
     localStorage.removeItem("authToken");
     setLogin("");
     setPassword("");
+    setConfirmPassword("");
+    setIsRegistering(false);
+  };
+
+  const switchMode = () => {
+    setIsRegistering(!isRegistering);
+    setError("");
+    setLogin("");
+    setPassword("");
+    setConfirmPassword("");
   };
 
   if (loading) {
@@ -107,16 +166,21 @@ const AuthGuard: React.FC<AuthGuardProps> = ({ children }) => {
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
             <CardTitle className="flex items-center justify-center gap-2">
-              <Icon name="Shield" size={24} />
-              Вход в систему
+              <Icon name={isRegistering ? "UserPlus" : "Shield"} size={24} />
+              {isRegistering ? "Регистрация" : "Вход в систему"}
             </CardTitle>
             <CardDescription>
-              Введите логин и пароль для доступа
+              {isRegistering
+                ? "Создайте новый аккаунт для доступа"
+                : "Введите логин и пароль для доступа"}
             </CardDescription>
             <div className="text-xs text-gray-500 mt-2">IP: {userIP}</div>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleLogin} className="space-y-4">
+            <form
+              onSubmit={isRegistering ? handleRegister : handleLogin}
+              className="space-y-4"
+            >
               <div>
                 <Input
                   type="text"
@@ -135,13 +199,39 @@ const AuthGuard: React.FC<AuthGuardProps> = ({ children }) => {
                   required
                 />
               </div>
+              {isRegistering && (
+                <div>
+                  <Input
+                    type="password"
+                    placeholder="Подтвердите пароль"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                  />
+                </div>
+              )}
               {error && (
                 <div className="text-red-500 text-sm text-center">{error}</div>
               )}
               <Button type="submit" className="w-full">
-                <Icon name="LogIn" size={16} className="mr-2" />
-                Войти
+                <Icon
+                  name={isRegistering ? "UserPlus" : "LogIn"}
+                  size={16}
+                  className="mr-2"
+                />
+                {isRegistering ? "Зарегистрироваться" : "Войти"}
               </Button>
+              <div className="text-center">
+                <button
+                  type="button"
+                  onClick={switchMode}
+                  className="text-sm text-blue-600 hover:text-blue-800 underline"
+                >
+                  {isRegistering
+                    ? "Уже есть аккаунт? Войти"
+                    : "Нет аккаунта? Зарегистрироваться"}
+                </button>
+              </div>
             </form>
           </CardContent>
         </Card>
